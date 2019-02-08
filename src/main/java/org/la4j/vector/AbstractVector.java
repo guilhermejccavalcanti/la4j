@@ -22,13 +22,11 @@
  *                 Miron Aseev
  * 
  */
-
 package org.la4j.vector;
 
 import java.text.DecimalFormat;
 import java.text.NumberFormat;
 import java.util.Random;
-
 import org.la4j.factory.Factory;
 import org.la4j.matrix.Matrices;
 import org.la4j.matrix.Matrix;
@@ -37,10 +35,12 @@ import org.la4j.vector.functor.VectorFunction;
 import org.la4j.vector.functor.VectorPredicate;
 import org.la4j.vector.functor.VectorProcedure;
 import org.la4j.vector.operation.VectorOperations;
+import org.la4j.vector.sparse.SparseVector;
 
 public abstract class AbstractVector implements Vector {
 
     private static final String DEFAULT_DELIMITER = ", ";
+
     private static final NumberFormat DEFAULT_FORMATTER = new DecimalFormat("0.000");
 
     protected int length;
@@ -49,7 +49,6 @@ public abstract class AbstractVector implements Vector {
 
     protected AbstractVector(Factory factory, int length) {
         ensureLengthIsCorrect(length);
-
         this.factory = factory;
         this.length = length;
     }
@@ -81,13 +80,10 @@ public abstract class AbstractVector implements Vector {
     @Override
     public Vector add(double value, Factory factory) {
         ensureFactoryIsNotNull(factory);
-
         Vector result = blank(factory);
-
         for (int i = 0; i < length; i++) {
             result.set(i, get(i) + value);
         }
-
         return result;
     }
 
@@ -108,7 +104,6 @@ public abstract class AbstractVector implements Vector {
         ensureFactoryIsNotNull(factory);
         ensureArgumentIsNotNull(vector, "vector");
         ensureVectorIsSimilar(vector);
-
         return pipeTo(VectorOperations.ooPlaceVectorToVectorAddition(factory), vector);
     }
 
@@ -116,7 +111,6 @@ public abstract class AbstractVector implements Vector {
     public void addInPlace(Vector vector) {
         ensureArgumentIsNotNull(vector, "vector");
         ensureVectorIsSimilar(vector);
-
         pipeTo(VectorOperations.inPlaceVectorToVectorAddition(), vector);
     }
 
@@ -128,7 +122,6 @@ public abstract class AbstractVector implements Vector {
     @Override
     public Vector multiply(double value, Factory factory) {
         ensureFactoryIsNotNull(factory);
-
         return pipeTo(VectorOperations.ooPlaceVectorByValueMultiplication(value, factory));
     }
 
@@ -145,15 +138,12 @@ public abstract class AbstractVector implements Vector {
     @Override
     public Vector hadamardProduct(Vector vector, Factory factory) {
         ensureFactoryIsNotNull(factory);
-        ensureArgumentIsNotNull(vector,  "vector");
+        ensureArgumentIsNotNull(vector, "vector");
         ensureVectorIsSimilar(vector);
-
         Vector result = blank(factory);
-
         for (int i = 0; i < length; i++) {
             result.set(i, get(i) * vector.get(i));
         }
-
         return result;
     }
 
@@ -166,25 +156,17 @@ public abstract class AbstractVector implements Vector {
     public Vector multiply(Matrix matrix, Factory factory) {
         ensureFactoryIsNotNull(factory);
         ensureArgumentIsNotNull(matrix, "matrix");
-
         if (length != matrix.rows()) {
-            fail("Wrong matrix dimensions: " + matrix.rows() + "x" + matrix.columns() +
-                 ". Should be: " + length + "x_.");
+            fail("Wrong matrix dimensions: " + matrix.rows() + "x" + matrix.columns() + ". Should be: " + length + "x_.");
         }
-
         Vector result = factory.createVector(matrix.columns());
-
         for (int j = 0; j < matrix.columns(); j++) {
-
             double acc = 0.0;
-
             for (int i = 0; i < matrix.rows(); i++) {
                 acc += get(i) * matrix.get(i, j);
             }
-
             result.set(j, acc);
         }
-
         return result;
     }
 
@@ -208,13 +190,10 @@ public abstract class AbstractVector implements Vector {
         ensureFactoryIsNotNull(factory);
         ensureArgumentIsNotNull(vector, "vector");
         ensureVectorIsSimilar(vector);
-
         Vector result = blank(factory);
-
         for (int i = 0; i < length; i++) {
             result.set(i, get(i) - vector.get(i));
         }
-
         return result;
     }
 
@@ -238,11 +217,40 @@ public abstract class AbstractVector implements Vector {
         return fold(Vectors.asSumAccumulator(0.0));
     }
 
+    /**
+     * Helper class for performing a sparse / dense vector product
+     */
+    private static final class SparseDot implements VectorProcedure {
+
+        public Vector other;
+
+        double result;
+
+        public SparseDot(Vector other) {
+            this.other = other;
+            result = 0;
+        }
+
+        @Override
+        public void apply(int i, double value) {
+            result += other.get(i) * value;
+        }
+    }
+
     @Override
     public double innerProduct(Vector vector) {
         ensureArgumentIsNotNull(vector, "vector");
         ensureVectorIsSimilar(vector);
-
+        if (vector instanceof SparseVector) {
+            SparseVector svector = (SparseVector) vector;
+            SparseDot sparseDot = new SparseDot(this);
+            svector.eachNonZero(sparseDot);
+            return sparseDot.result;
+        } else {
+            if (this instanceof SparseVector) {
+                return vector.innerProduct(this);
+            }
+        }
         return pipeTo(VectorOperations.ooPlaceInnerProduct(), vector);
     }
 
@@ -255,15 +263,12 @@ public abstract class AbstractVector implements Vector {
     public Matrix outerProduct(Vector vector, Factory factory) {
         ensureFactoryIsNotNull(factory);
         ensureArgumentIsNotNull(vector, "vector");
-
         Matrix result = factory.createMatrix(length, vector.length());
-
         for (int i = 0; i < length; i++) {
             for (int j = 0; j < vector.length(); j++) {
                 result.set(i, j, get(i) * vector.get(j));
             }
         }
-
         return result;
     }
 
@@ -275,7 +280,6 @@ public abstract class AbstractVector implements Vector {
     @Override
     public Vector blank(Factory factory) {
         ensureFactoryIsNotNull(factory);
-
         return factory.createVector(length);
     }
 
@@ -287,11 +291,9 @@ public abstract class AbstractVector implements Vector {
     @Override
     public Vector copy(Factory factory) {
         ensureFactoryIsNotNull(factory);
-
         if (factory == this.factory) {
             return copy();
         }
-
         return factory.createVector(this);
     }
 
@@ -303,13 +305,10 @@ public abstract class AbstractVector implements Vector {
     @Override
     public Vector resize(int length, Factory factory) {
         ensureFactoryIsNotNull(factory);
-
         Vector result = factory.createVector(length);
-
         for (int i = 0; i < Math.min(length, this.length); i++) {
             result.set(i, get(i));
         }
-
         return result;
     }
 
@@ -321,20 +320,14 @@ public abstract class AbstractVector implements Vector {
     @Override
     public Vector shuffle(Factory factory) {
         ensureFactoryIsNotNull(factory);
-
         Vector result = copy(factory);
-
-        // Conduct Fisher-Yates shuffle
         Random rnd = new Random();
-
         for (int i = 0; i < length; i++) {
             int ii = rnd.nextInt(length - i) + i;
-
             double a = result.get(ii);
             result.set(ii, result.get(i));
             result.set(i, a);
         }
-
         return result;
     }
 
@@ -366,17 +359,13 @@ public abstract class AbstractVector implements Vector {
     @Override
     public Vector slice(int from, int until, Factory factory) {
         ensureFactoryIsNotNull(factory);
-
         if (until - from < 0) {
             fail("Wrong slice range: [" + from + ".." + until + "].");
         }
-
         Vector result = factory.createVector(until - from);
-
         for (int i = from; i < until; i++) {
             result.set(i - from, get(i));
         }
-
         return result;
     }
 
@@ -388,17 +377,13 @@ public abstract class AbstractVector implements Vector {
     @Override
     public Vector select(int[] indices, Factory factory) {
         int newLength = indices.length;
-
         if (newLength == 0) {
             fail("No elements selected.");
         }
-
         Vector result = factory.createVector(newLength);
-
         for (int i = 0; i < newLength; i++) {
             result.set(i, get(indices[i]));
         }
-
         return result;
     }
 
@@ -431,13 +416,10 @@ public abstract class AbstractVector implements Vector {
 
     @Override
     public Vector transform(VectorFunction function, Factory factory) {
-
         Vector result = blank(factory);
-
         for (int i = 0; i < length; i++) {
             result.set(i, function.evaluate(i, get(i)));
         }
-
         return result;
     }
 
@@ -448,10 +430,8 @@ public abstract class AbstractVector implements Vector {
 
     @Override
     public Vector transform(int i, VectorFunction function, Factory factory) {
-
         Vector result = copy(factory);
         result.set(i, function.evaluate(i, get(i)));
-
         return result;
     }
 
@@ -469,23 +449,18 @@ public abstract class AbstractVector implements Vector {
 
     @Override
     public double fold(VectorAccumulator accumulator) {
-
         for (int i = 0; i < length; i++) {
             accumulator.update(i, get(i));
         }
-
         return accumulator.accumulate();
     }
 
     @Override
     public boolean is(VectorPredicate predicate) {
-
         boolean result = true;
-
         for (int i = 0; i < length; i++) {
-            result = result && predicate.test(i, get(i)); 
+            result = result && predicate.test(i, get(i));
         }
-
         return result;
     }
 
@@ -520,74 +495,56 @@ public abstract class AbstractVector implements Vector {
 
     @Override
     public int hashCode() {
-
         int result = 17;
-
         for (int i = 0; i < length; i++) {
             long value = (long) get(i);
             result = 37 * result + (int) (value ^ (value >>> 32));
         }
-
         return result;
     }
 
     @Override
     public boolean equals(Object object) {
-
         if (this == object) {
             return true;
         }
         if (object == null) {
             return false;
         }
-
         if (!(object instanceof Vector)) {
             return false;
         }
-
         Vector vector = (Vector) object;
-
         if (length != vector.length()) {
             return false;
         }
-
         boolean result = true;
-
         for (int i = 0; result && i < length; i++) {
             double a = get(i);
             double b = vector.get(i);
-
             double diff = Math.abs(a - b);
-
             result = (a == b) || (diff < Matrices.EPS || diff / Math.max(Math.abs(a), Math.abs(b)) < Vectors.EPS);
         }
-
         return result;
     }
 
     @Override
     public String toString() {
-        return mkString(DEFAULT_FORMATTER,
-                        DEFAULT_DELIMITER);
+        return mkString(DEFAULT_FORMATTER, DEFAULT_DELIMITER);
     }
 
     @Override
     public String mkString(NumberFormat formatter) {
-        return mkString(formatter,
-                        DEFAULT_DELIMITER);
+        return mkString(formatter, DEFAULT_DELIMITER);
     }
 
     @Override
     public String mkString(NumberFormat formatter, String delimiter) {
-
         StringBuilder sb = new StringBuilder();
-
         for (int i = 0; i < length; i++) {
-
             sb.append(formatter.format(get(i)));
             sb.append((i < length - 1 ? delimiter : ""));
         }
-
         return sb.toString();
     }
 
@@ -600,7 +557,7 @@ public abstract class AbstractVector implements Vector {
             fail("Wrong vector length: " + length);
         }
         if (length == Integer.MAX_VALUE) {
-            fail("Wrong vector length: use 'Integer.MAX_VALUE - 1' instead.");
+            fail("Wrong vector length: use \'Integer.MAX_VALUE - 1\' instead.");
         }
     }
 
@@ -612,7 +569,7 @@ public abstract class AbstractVector implements Vector {
 
     protected void ensureArgumentIsNotNull(Object argument, String name) {
         if (argument == null) {
-            fail("Bad argument: \"" + name + "\" is 'null'.");
+            fail("Bad argument: \"" + name + "\" is \'null\'.");
         }
     }
 
